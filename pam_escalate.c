@@ -1,6 +1,6 @@
 /**********************************************************************
 | pam_escalate
-| Version 1
+| Version 1.0-rc1
 | 
 | A PAM to use separate escalation credentials
 | Web: http://projects.capelis.dj/pam_escalate
@@ -15,16 +15,20 @@
 #include<unistd.h>
 #include<sys/types.h>
 #include<pwd.h>
+#include<errno.h>
 
 #include<security/pam_appl.h>
 #include<security/pam_misc.h>
 
-#include"helpers.h"
-void chk_pamerr(int chk, pam_handle_t * pamh); 
+#define PAM_SM_AUTH
+#include<security/pam_modules.h>
+
+void chk_pamerr(int chk, pam_handle_t * pamh, void * free0, void * free1, void * free2);
+void chk_err(void * check, void * free0, void * free1, void * free2);
 
 #define BUF 1024
 
-int main()
+PAM_EXTERN int pam_sm_authenticate(pam_handle_t * apph, int flags, int argc, const char ** argv)
 {
     /* Part I - Initial checks */
     struct passwd * user;
@@ -36,59 +40,61 @@ int main()
     int pwentcharsmax = sysconf(_SC_GETPW_R_SIZE_MAX);
 
     es_name = calloc(1, L_cuserid+5);
-    chk_memerr(es_name);
+    chk_err(es_name, NULL, NULL, NULL);
+    if(es_name == NULL)
+        return PAM_AUTH_ERR;
     pwentchars = calloc(1, pwentcharsmax);
-    chk_memerr(pwentchars);
+    chk_err(pwentchars, es_name, NULL, NULL);
+    if(pwentchars == NULL)
+        return PAM_AUTH_ERR;
     root_home = calloc(1, pwentcharsmax);
-    chk_memerr(pwentchars);
+    chk_err(root_home, es_name, pwentchars, NULL);
+    if(root_home == NULL)
+        return PAM_AUTH_ERR;
     errno = 0;
 
     if(getuid() == 0)
     {
-        printf("You are already what you seek to become.  Just use your hands.\n");
+        //You are already what you seek to become.  Just use your hands.
         free(es_name);
         free(pwentchars);
         free(root_home);
-        return 0;
+        return PAM_SUCCESS;
     }
 
     ret = getpwuid_r(0, &pwent, pwentchars, pwentcharsmax, &user);
     strncpy(root_home, user->pw_dir, pwentcharsmax);
 
     ret = getpwuid_r(getuid(), &pwent, pwentchars, pwentcharsmax, &user);
-    printf("User: %s Homedir: %s ID: %d\n", user->pw_name, user->pw_dir, user->pw_uid);
+    //printf("User: %s Homedir: %s ID: %d\n", user->pw_name, user->pw_dir, user->pw_uid);
 
-    es_name=calloc(1, L_cuserid+5);
     strncpy(es_name, user->pw_name, L_cuserid);
     strncat(es_name, "_root", L_cuserid+5);
 
-    printf("Checking for valid escalation user %s...\n", es_name);
+    //printf("Checking for valid escalation user %s...\n", es_name);
     ret = getpwnam_r(es_name, &pwent, pwentchars, pwentcharsmax, &user);
     if(ret == 0 && user == NULL)
     {
-        printf("You are not authorized to escalate\n");
+        //printf("You are not authorized to escalate\n");
         free(es_name);
         free(pwentchars);
         free(root_home);
-        return EPERM;
+        return PAM_AUTH_ERR;
     }
     /* If user's still null after the return from above, an actual error happened */
-    chk_memerr(user);
+    chk_err(user, es_name, pwentchars, root_home);
+    if(user == NULL)
+        return PAM_AUTH_ERR;
     if(strncmp(user->pw_dir, root_home, pwentcharsmax))
     {
-        printf("An escalation user exists for your username, but is not valid\n");
+        //printf("An escalation user exists for your username, but is not valid\n");
         free(es_name);
         free(pwentchars);
         free(root_home);
-        return EPERM;
-    }
-    else
-    {
-        printf("You are authorized to escalate\n");
+        return PAM_AUTH_ERR;
     }
 
-    printf("Escalation user: %s Homedir: %s ID: %d\n", user->pw_name, user->pw_dir, user->pw_uid);
-
+    //printf("Escalation user: %s Homedir: %s ID: %d\n", user->pw_name, user->pw_dir, user->pw_uid);
 
     /* Part II - Talk with PAM*/
     /* Okay, so now check that they've got the right escalation password */
@@ -97,28 +103,62 @@ int main()
     conv.conv=misc_conv;
 
     ret = pam_start("pam_escalate", es_name, &conv, &pamh);
-    chk_pamerr(ret, pamh);
-    ret = pam_authenticate(pamh, 0);
-    chk_pamerr(ret, pamh);
-    printf("password correct\n");
-    ret = pam_acct_mgmt(pamh, 0);
-    chk_pamerr(ret, pamh);
-    printf("account valid\n");
+    chk_pamerr(ret, pamh, es_name, pwentchars, root_home);
+    ret = pam_authenticate(pamh, flags);
+    chk_pamerr(ret, pamh, es_name, pwentchars, root_home);
+    if(ret != PAM_SUCCESS)
+        return ret;
+    ret = pam_acct_mgmt(pamh, flags);
+    chk_pamerr(ret, pamh, es_name, pwentchars, root_home);
+    if(ret != PAM_SUCCESS)
+        return ret;
     pam_end(pamh, ret);
 
     free(es_name);
     free(pwentchars);
     free(root_home);
 
-    return 0;
+    return PAM_SUCCESS;
 }
 
-void chk_pamerr(int chk, pam_handle_t * pamh)
+void chk_pamerr(int chk, pam_handle_t * pamh, void * free0, void * free1, void * free2)
 {
     if(chk != PAM_SUCCESS)
     {
-        printf("%s\n", pam_strerror(pamh, chk));
+        //printf("%s\n", pam_strerror(pamh, chk));
+        free(free0);
+        free(free1);
+        free(free2);
         pam_end(pamh, chk);
-        exit(-1);
     }
 }
+
+void chk_err(void * check, void * free0, void * free1, void * free2)
+{
+    if(check == NULL)
+    {
+        //perror("An error has occurred");
+        if(free0)
+            free(free0);
+        if(free1)
+            free(free1);
+        if(free2)
+            free(free2);
+    }
+}
+
+#ifdef PAM_STATIC
+
+/* static module data */
+
+struct pam_module _pam_escalate_modstruct = {
+    "pam_escalate",
+    pam_sm_authenticate,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+};
+
+#endif
