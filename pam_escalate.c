@@ -6,8 +6,6 @@
 | Web: http://projects.capelis.dj/pam_escalate
 | 
 | Author: D.J. Capelis
-| Copyright the Regents of the University of California, 2008.
-| Released under the GNU General Public License
 | 
 **********************************************************************/
 
@@ -33,6 +31,7 @@ int main()
     struct passwd pwent;
     char * pwentchars;
     char * es_name;
+    char * root_home;
     int ret;
     int pwentcharsmax = sysconf(_SC_GETPW_R_SIZE_MAX);
 
@@ -40,19 +39,26 @@ int main()
     chk_memerr(es_name);
     pwentchars = calloc(1, pwentcharsmax);
     chk_memerr(pwentchars);
+    root_home = calloc(1, pwentcharsmax);
+    chk_memerr(pwentchars);
     errno = 0;
 
     if(getuid() == 0)
     {
         printf("You are already what you seek to become.  Just use your hands.\n");
+        free(es_name);
+        free(pwentchars);
+        free(root_home);
         return 0;
     }
+
+    ret = getpwuid_r(0, &pwent, pwentchars, pwentcharsmax, &user);
+    strncpy(root_home, user->pw_dir, pwentcharsmax);
 
     ret = getpwuid_r(getuid(), &pwent, pwentchars, pwentcharsmax, &user);
     printf("User: %s Homedir: %s ID: %d\n", user->pw_name, user->pw_dir, user->pw_uid);
 
     es_name=calloc(1, L_cuserid+5);
-    //strncpy(es_name, "root", 5);
     strncpy(es_name, user->pw_name, L_cuserid);
     strncat(es_name, "_root", L_cuserid+5);
 
@@ -61,14 +67,19 @@ int main()
     if(ret == 0 && user == NULL)
     {
         printf("You are not authorized to escalate\n");
+        free(es_name);
+        free(pwentchars);
+        free(root_home);
         return EPERM;
     }
     /* If user's still null after the return from above, an actual error happened */
     chk_memerr(user);
-    //if(strncmp(user->pw_dir, "/root", 6))
-    if(0)
+    if(strncmp(user->pw_dir, root_home, pwentcharsmax))
     {
         printf("An escalation user exists for your username, but is not valid\n");
+        free(es_name);
+        free(pwentchars);
+        free(root_home);
         return EPERM;
     }
     else
@@ -94,6 +105,10 @@ int main()
     chk_pamerr(ret, pamh);
     printf("account valid\n");
     pam_end(pamh, ret);
+
+    free(es_name);
+    free(pwentchars);
+    free(root_home);
 
     return 0;
 }
