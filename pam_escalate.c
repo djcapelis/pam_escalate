@@ -18,7 +18,6 @@
 #include<errno.h>
 
 #include<security/pam_appl.h>
-#include<security/pam_misc.h>
 
 #define PAM_SM_AUTH
 #include<security/pam_modules.h>
@@ -36,8 +35,11 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t * apph, int flags, int argc, con
     char * pwentchars;
     char * es_name;
     char * root_home;
+    char * uname;
+    int uid;
     int ret;
     int pwentcharsmax = sysconf(_SC_GETPW_R_SIZE_MAX);
+    struct pam_conv * conv;
 
     es_name = calloc(1, L_cuserid+5);
     chk_err(es_name, NULL, NULL, NULL);
@@ -53,7 +55,14 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t * apph, int flags, int argc, con
         return PAM_AUTH_ERR;
     errno = 0;
 
-    if(getuid() == 0)
+    ret = pam_get_item(apph, PAM_USER, &uname);
+    chk_pamerr(ret, NULL, es_name, pwentchars, root_home);
+    if(ret != PAM_SUCCESS)
+        return PAM_AUTH_ERR;
+
+    ret = getpwnam_r(uname, &pwent, pwentchars, pwentcharsmax, &user);
+
+    if(getuid() == 0 && user->pw_uid == 0)
     {
         //You are already what you seek to become.  Just use your hands.
         free(es_name);
@@ -61,11 +70,19 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t * apph, int flags, int argc, con
         free(root_home);
         return PAM_SUCCESS;
     }
+    if(getuid() == 0)
+    {
+        uid = user->pw_uid;
+    }
+    else
+    {
+        uid = getuid();
+    }
 
     ret = getpwuid_r(0, &pwent, pwentchars, pwentcharsmax, &user);
     strncpy(root_home, user->pw_dir, pwentcharsmax);
 
-    ret = getpwuid_r(getuid(), &pwent, pwentchars, pwentcharsmax, &user);
+    ret = getpwuid_r(uid, &pwent, pwentchars, pwentcharsmax, &user);
     //printf("User: %s Homedir: %s ID: %d\n", user->pw_name, user->pw_dir, user->pw_uid);
 
     strncpy(es_name, user->pw_name, L_cuserid);
@@ -99,10 +116,12 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t * apph, int flags, int argc, con
     /* Part II - Talk with PAM*/
     /* Okay, so now check that they've got the right escalation password */
     pam_handle_t * pamh;
-    struct pam_conv conv;
-    conv.conv=misc_conv;
 
-    ret = pam_start("pam_escalate", es_name, &conv, &pamh);
+    ret = pam_get_item(apph, PAM_CONV, &conv);
+    chk_pamerr(ret, NULL, es_name, pwentchars, root_home);
+    if(ret != PAM_SUCCESS)
+        return ret;
+    ret = pam_start("pam_escalate", es_name, conv, &pamh);
     chk_pamerr(ret, pamh, es_name, pwentchars, root_home);
     ret = pam_authenticate(pamh, flags);
     chk_pamerr(ret, pamh, es_name, pwentchars, root_home);
@@ -121,6 +140,11 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t * apph, int flags, int argc, con
     return PAM_SUCCESS;
 }
 
+PAM_EXTERN int pam_sm_setcred(pam_handle_t * apph, int flags, int argc, const char ** argv)
+{
+    return PAM_SUCCESS;
+}
+
 void chk_pamerr(int chk, pam_handle_t * pamh, void * free0, void * free1, void * free2)
 {
     if(chk != PAM_SUCCESS)
@@ -129,7 +153,8 @@ void chk_pamerr(int chk, pam_handle_t * pamh, void * free0, void * free1, void *
         free(free0);
         free(free1);
         free(free2);
-        pam_end(pamh, chk);
+        if(pamh)
+            pam_end(pamh, chk);
     }
 }
 
