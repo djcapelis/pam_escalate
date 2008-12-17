@@ -113,25 +113,35 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t * apph, int flags, int argc, con
 
     //printf("Escalation user: %s Homedir: %s ID: %d\n", user->pw_name, user->pw_dir, user->pw_uid);
 
-    /* Part II - Talk with PAM*/
     /* Okay, so now check that they've got the right escalation password */
-    pam_handle_t * pamh;
+    if(argc > 0)
+    {
+        pam_handle_t * pamh;
 
-    ret = pam_get_item(apph, PAM_CONV, &conv);
-    chk_pamerr(ret, NULL, es_name, pwentchars, root_home);
-    if(ret != PAM_SUCCESS)
-        return ret;
-    ret = pam_start("pam_escalate", es_name, conv, &pamh);
-    chk_pamerr(ret, pamh, es_name, pwentchars, root_home);
-    ret = pam_authenticate(pamh, flags);
-    chk_pamerr(ret, pamh, es_name, pwentchars, root_home);
-    if(ret != PAM_SUCCESS)
-        return ret;
-    ret = pam_acct_mgmt(pamh, flags);
-    chk_pamerr(ret, pamh, es_name, pwentchars, root_home);
-    if(ret != PAM_SUCCESS)
-        return ret;
-    pam_end(pamh, ret);
+        ret = pam_get_item(apph, PAM_CONV, &conv);
+        chk_pamerr(ret, NULL, es_name, pwentchars, root_home);
+        if(ret != PAM_SUCCESS)
+            return ret;
+        //Potentially append pam_get_item(apph, PAM_SERVICE, &service);
+        ret = pam_start("pam_escalate", es_name, conv, &pamh);
+        chk_pamerr(ret, pamh, es_name, pwentchars, root_home);
+        ret = pam_authenticate(pamh, flags);
+        chk_pamerr(ret, pamh, es_name, pwentchars, root_home);
+        if(ret != PAM_SUCCESS)
+            return ret;
+        ret = pam_acct_mgmt(pamh, flags);
+        chk_pamerr(ret, pamh, es_name, pwentchars, root_home);
+        if(ret != PAM_SUCCESS)
+            return ret;
+        pam_end(pamh, ret);
+    }
+    else
+    {
+        ret = pam_set_item(apph, PAM_USER, es_name);
+        chk_pamerr(ret, NULL, es_name, pwentchars, root_home);
+        if(ret != PAM_SUCCESS)
+            return ret;
+    }
 
     free(es_name);
     free(pwentchars);
