@@ -1,6 +1,6 @@
 /**********************************************************************
 | pam_escalate
-| Version 1.0-rc1
+| Version 0.9-rc1
 | 
 | A PAM to use separate escalation credentials
 | Web: http://projects.capelis.dj/pam_escalate
@@ -66,7 +66,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t * apph, int flags, int argc, con
         return PAM_AUTH_ERR;
     errno = 0;
 
-    ret = pam_get_item(apph, PAM_USER, &uname);
+    ret = pam_get_item(apph, PAM_USER, (void*) &uname);
     chk_pamerr(ret, NULL, es_name, pwentchars, root_home);
     if(ret != PAM_SUCCESS)
         return PAM_AUTH_ERR;
@@ -136,19 +136,17 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t * apph, int flags, int argc, con
         {
             char * srvname;
 
-            ret = pam_get_item(apph, PAM_SERVICE, &srvname);
+            ret = pam_get_item(apph, PAM_SERVICE, (void *) &srvname);
             chk_pamerr(ret, NULL, es_name, pwentchars, root_home);
             if(ret != PAM_SUCCESS)
                 return ret;
             strncat(service, "_", 1);
             strncat(service, srvname, pwentcharsmax - 1 - 12 - 1); //room for null, "_" and "pam_escalate"
         }
-        printf("Using service name %s\n", service);
-        ret = pam_get_item(apph, PAM_CONV, &conv);
+        ret = pam_get_item(apph, PAM_CONV, (void *) &conv);
         chk_pamerr(ret, NULL, es_name, pwentchars, root_home);
         if(ret != PAM_SUCCESS)
             return ret;
-        //Potentially append pam_get_item(apph, PAM_SERVICE, &service);
         ret = pam_start(service, es_name, conv, &pamh);
         chk_pamerr(ret, pamh, es_name, pwentchars, root_home);
         if(ret != PAM_SUCCESS)
