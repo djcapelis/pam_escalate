@@ -39,6 +39,18 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t * apph, int flags, int argc, con
     int uid;
     int ret;
     int pwentcharsmax = sysconf(_SC_GETPW_R_SIZE_MAX);
+    struct pam_conv * conv;
+    int i;
+    int proxy = 0;
+    int own_substack = 0;
+
+    for(i=0; i<argc;++i)
+    {
+        if(!strncmp(argv[i], "proxy", 6))
+            proxy = 1;
+        if(!strncmp(argv[i], "own_substack", 13))
+            own_substack = 1;
+    }
 
     es_name = calloc(1, L_cuserid+5);
     chk_err(es_name, NULL, NULL, NULL);
@@ -113,6 +125,50 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t * apph, int flags, int argc, con
     //printf("Escalation user: %s Homedir: %s ID: %d\n", user->pw_name, user->pw_dir, user->pw_uid);
 
     /* Okay, so now check that they've got the right escalation password */
+    if(proxy)
+    {
+        pam_handle_t * pamh;
+        //Reuse the same memory we already allocated and manage for root_home, except under a clearer name
+        char * service = root_home;
+
+        strncpy(service, "pam_escalate", pwentcharsmax);
+        if(own_substack)
+        {
+            char * srvname;
+
+            ret = pam_get_item(apph, PAM_SERVICE, &srvname);
+            chk_pamerr(ret, NULL, es_name, pwentchars, root_home);
+            if(ret != PAM_SUCCESS)
+                return ret;
+            strncat(service, "_", 1);
+            strncat(service, srvname, pwentcharsmax - 1 - 12 - 1); //room for null, "_" and "pam_escalate"
+        }
+        printf("Using service name %s\n", service);
+        ret = pam_get_item(apph, PAM_CONV, &conv);
+        chk_pamerr(ret, NULL, es_name, pwentchars, root_home);
+        if(ret != PAM_SUCCESS)
+            return ret;
+        //Potentially append pam_get_item(apph, PAM_SERVICE, &service);
+        ret = pam_start(service, es_name, conv, &pamh);
+        chk_pamerr(ret, pamh, es_name, pwentchars, root_home);
+        if(ret != PAM_SUCCESS)
+            return ret;
+        ret = pam_authenticate(pamh, flags);
+        chk_pamerr(ret, pamh, es_name, pwentchars, root_home);
+        if(ret != PAM_SUCCESS)
+            return ret;
+        ret = pam_acct_mgmt(pamh, flags);
+        chk_pamerr(ret, pamh, es_name, pwentchars, root_home);
+        if(ret != PAM_SUCCESS)
+            return ret;
+        pam_end(pamh, ret);
+
+        free(es_name);
+        free(pwentchars);
+        free(root_home);
+
+        return PAM_SUCCESS;
+    }
     ret = pam_set_item(apph, PAM_USER, es_name);
     chk_pamerr(ret, NULL, es_name, pwentchars, root_home);
     if(ret != PAM_SUCCESS)
@@ -164,7 +220,7 @@ void chk_err(void * check, void * free0, void * free1, void * free2)
 struct pam_module _pam_escalate_modstruct = {
     "pam_escalate",
     pam_sm_authenticate,
-    NULL,
+    pam_sm_setcred,
     NULL,
     NULL,
     NULL,
