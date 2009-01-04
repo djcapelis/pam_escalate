@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-g -O2 -fPIC -Wall -Wextra -I/usr/include/security -I/usr/include/pam
+CFLAGS=-O2 -fPIC -Wall -Wextra -I/usr/include/security -I/usr/include/pam
 LDFLAGS=-shared -lpam -lpam_misc
 SRCS=pam_escalate.c
 
