@@ -17,10 +17,10 @@
 #include<pwd.h>
 #include<errno.h>
 
-#include<security/pam_appl.h>
+#include<pam_appl.h>
 
 #define PAM_SM_AUTH
-#include<security/pam_modules.h>
+#include<pam_modules.h>
 
 void chk_pamerr(int chk, pam_handle_t * pamh, void * free0, void * free1, void * free2);
 void chk_err(void * check, void * free0, void * free1, void * free2);
@@ -52,7 +52,7 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t * apph, int flags, int argc, con
             own_substack = 1;
     }
 
-    es_name = calloc(1, L_cuserid+5);
+    es_name = calloc(1, pwentcharsmax+5);
     chk_err(es_name, NULL, NULL, NULL);
     if(es_name == NULL)
         return PAM_AUTH_ERR;
@@ -96,8 +96,8 @@ PAM_EXTERN int pam_sm_authenticate(pam_handle_t * apph, int flags, int argc, con
     ret = getpwuid_r(uid, &pwent, pwentchars, pwentcharsmax, &user);
     //printf("User: %s Homedir: %s ID: %d\n", user->pw_name, user->pw_dir, user->pw_uid);
 
-    strncpy(es_name, user->pw_name, L_cuserid);
-    strncat(es_name, "_root", L_cuserid+5);
+    strncpy(es_name, user->pw_name, pwentcharsmax);
+    strncat(es_name, "_root", pwentcharsmax+5);
 
     //printf("Checking for valid escalation user %s...\n", es_name);
     ret = getpwnam_r(es_name, &pwent, pwentchars, pwentcharsmax, &user);
