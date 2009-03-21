@@ -26,8 +26,12 @@ if(EXISTS /usr/include/pam/)
     INCLUDE_DIRECTORIES(/usr/include/pam/)
 endif(EXISTS /usr/include/pam/)
 
+# Libraries:
+
 # Target:
-ADD_LIBRARY(pam_escalate SHARED ${SRCS} ${HDRS})
+ADD_LIBRARY(pam_escalate MODULE ${SRCS} ${HDRS})
+target_link_libraries(pam_escalate pam pam_misc)
+set_target_properties(pam_escalate PROPERTIES PREFIX "")
 
 # Install:
 if(EXISTS /lib64/security/)
