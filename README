@@ -1,0 +1,45 @@
+# pam_escalate #
+
+Have you ever been frustrated that the same password you use to access your computer's user account is the same password you use to perform administrative functions with sudo? Have you ever had a server environment where many system administrators needed to use su but you didn't want all of them to share a common root password? Wouldn't it be nice if each user could perform administrative and sensitive operations using a password that was separate from their own user password?
+
+Well, this is exactly what pam_escalate does. It's a simple PAM that you can install on any of your linux or OSX systems. For each user you want to allow to escalate, you create a separate account called an escalation account. Then with a few changes to your pam configuration, su and sudo will prompt each user for the password to their escalation account before grantingaccess. If you'd like to know more, feel free to read the documentation, download the module and install it or read the FAQ.
+
+Note: This is an unmaintained project I wrote a long time ago.  You're welcome to use it, but you're responsible for the pieces.  pam_escalate was something I once boldly referred to as "fairly well tested" (read: it worked, usually) and should perform as documented, it could also eat your children or have all a manner of undefined behavior. Please feel free to contact me and let me know if you find any bugs or wish to provide patches.
+
+## Configuration ##
+
+Examples:
+
+Here's a way you could configure /etc/pam.d/sudo:
+```
+#%PAM-1.0
+
+auth required pam_escalate.so proxy own_substack
+#@include common-auth
+@include common-account
+
+session required pam_permit.so
+session required pam_limits.so
+```
+This "proxies" the request through another separate pam context, allowing you to configure escalations with their own pam_escalate file if you want:
+
+
+So if you use own_substack, you'd need a /etc/pam.d/pam_escalate file:
+```
+@include common-auth
+@include common-password
+@include common-account
+@include common-session
+```
+Which could do more interesting things if you were writing it, of course.
+
+
+Or you could configure su by writing a /etc/pam.d/su like so:
+```
+auth required pam_escalate.so
+
+@include common-auth
+@include common-account
+@include common-session
+```
+This basically requires pam_escalate but otherwise uses the normal path.  This is the simpler case.
