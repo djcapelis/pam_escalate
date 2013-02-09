@@ -3,9 +3,11 @@
 | Version 0.9-rc1
 | 
 | A PAM to use separate escalation credentials
-| Web: http://projects.capelis.dj/pam_escalate
 | 
-| Author: D.J. Capelis
+| This is an old unmaintained project
+| 
+| Author: D J Capelis
+| Contact: mail@capelis.dj
 | 
 **********************************************************************/
 
